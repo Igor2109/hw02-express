@@ -1,11 +1,19 @@
+const jimp = require("jimp");
 const express = require("express");
 
 const bcrypt = require("bcryptjs");
 
 const jwt = require("jsonwebtoken");
 
+const fs = require("fs/promises");
+
+const path = require("path");
+
+const avatarsPath = path.resolve("public", "avatars");
+
 const { userBodySchema, User } = require("../../models/users");
 const { authenticate } = require("../../middlewares/authenticate");
+const upload = require("../../middlewares/upload");
 
 const router = express.Router();
 
@@ -81,5 +89,31 @@ router.get("/current", authenticate, async (req, res, next) => {
 
   res.json({ email, subscription });
 });
+
+router.patch(
+  "/avatars",
+  authenticate,
+  upload.single("avatar"),
+  async (req, res, next) => {
+    const user = req.user;
+
+    if (!req.file) {
+      res
+        .status(400)
+        .json({ message: 'Please add avatar image to field "avatar"' });
+      return;
+    }
+    const newPath = path.join(avatarsPath, req.file.filename);
+    const oldPath = req.file.path;
+    await fs.rename(oldPath, newPath);
+    jimp.read(newPath, (err, selectedFile) => {
+      if (err) throw err;
+      selectedFile.resize(250, 250).write(newPath);
+    });
+    const userAvatarPath = path.join("public", "avatars", req.file.filename);
+    await User.updateOne({ _id: user._id }, { avatarURL: userAvatarPath });
+    res.status(200).json({ avatarURL: userAvatarPath });
+  }
+);
 
 module.exports = router;
