@@ -11,6 +11,8 @@ const path = require("path");
 
 const avatarsPath = path.resolve("public", "avatars");
 
+const gravatar = require("gravatar");
+
 const { userBodySchema, User } = require("../../models/users");
 const { authenticate } = require("../../middlewares/authenticate");
 const upload = require("../../middlewares/upload");
@@ -36,9 +38,16 @@ router.post("/register", async (req, res, next) => {
     return;
   }
   const hashPassword = await bcrypt.hash(body.password, 10);
+
+  const secureAvatarUrl = gravatar.url(
+    body.email,
+    { s: "250", r: "x", d: "retro" },
+    true
+  );
   const user = await User.create({
     ...body,
     password: hashPassword,
+    avatarURL: secureAvatarUrl,
   });
   res
     .status(201)
@@ -74,7 +83,11 @@ router.post("/login", async (req, res, next) => {
   await User.findByIdAndUpdate(user._id, { token });
   res.status(200).json({
     token,
-    user: { email: user.email, subscription: user.subscription },
+    user: {
+      email: user.email,
+      subscription: user.subscription,
+      avatarURL: user.avatarURL,
+    },
   });
 });
 
