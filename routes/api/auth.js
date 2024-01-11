@@ -13,9 +13,16 @@ const avatarsPath = path.resolve("public", "avatars");
 
 const gravatar = require("gravatar");
 
-const { userBodySchema, User } = require("../../models/users");
+const { nanoid } = require("nanoid");
+
+const {
+  userBodySchema,
+  User,
+  verifyEmailSchema,
+} = require("../../models/users");
 const { authenticate } = require("../../middlewares/authenticate");
 const upload = require("../../middlewares/upload");
+const { sendEmail } = require("../../helpers/sendemail");
 
 const router = express.Router();
 
@@ -39,6 +46,8 @@ router.post("/register", async (req, res, next) => {
   }
   const hashPassword = await bcrypt.hash(body.password, 10);
 
+  const verificationToken = nanoid();
+
   const secureAvatarUrl = gravatar.url(
     body.email,
     { s: "250", r: "x", d: "retro" },
@@ -48,7 +57,16 @@ router.post("/register", async (req, res, next) => {
     ...body,
     password: hashPassword,
     avatarURL: secureAvatarUrl,
+    verificationToken,
   });
+
+  const email = {
+    to: body.email,
+    subject: "Verification email",
+    html: `<a href="${process.env.PROJECT_URL}/users/verify/${verificationToken}" target="_blank">Click to verify</a>`,
+  };
+
+  await sendEmail(email);
   res
     .status(201)
     .json({ user: { email: user.email, subscription: user.subscription } });
@@ -69,6 +87,11 @@ router.post("/login", async (req, res, next) => {
 
   if (!user) {
     res.status(401).json({ message: "User with such email is't registered!" });
+    return;
+  }
+
+  if (!user.verify) {
+    res.status(401).json({ message: "Email is not verified!" });
     return;
   }
 
@@ -128,5 +151,52 @@ router.patch(
     res.status(200).json({ avatarURL: userAvatarPath });
   }
 );
+
+router.get("/verify/:verificationToken", async (req, res) => {
+  const verificationToken = req.params.verificationToken;
+  const user = await User.findOne({ verificationToken });
+
+  if (!user) {
+    res.status(404).json({ message: "User not found" });
+    return;
+  }
+
+  await User.findByIdAndUpdate(user._id, {
+    verify: true,
+    verificationToken: null,
+  });
+
+  res.status(200).json({ message: "Verification successful" });
+});
+
+router.post("/verify", async (req, res) => {
+  const body = req.body;
+  const { error } = verifyEmailSchema.validate(body);
+  if (error) {
+    res.status(400).json({ message: "missing required field email" });
+    return;
+  }
+
+  const user = await User.findOne({ email: body.email });
+
+  if (!user) {
+    res.status(404).json({ message: "Email not found" });
+    return;
+  }
+  if (user.verify) {
+    res.status(400).json({ message: "Verification has already been passed" });
+    return;
+  }
+
+  const email = {
+    to: user.email,
+    subject: "Verification email",
+    html: `<a href="${process.env.PROJECT_URL}/users/verify/${user.verificationToken}" target="_blank">Click to verify</a>`,
+  };
+
+  await sendEmail(email);
+
+  res.status(200).json({ message: "Verification email sent" });
+});
 
 module.exports = router;

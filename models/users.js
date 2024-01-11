@@ -11,6 +11,14 @@ const userBodySchema = joi.object({
   subscription: joi.string().allow("starter", "pro", "business"),
 });
 
+const verifyEmailSchema = joi.object({
+  email: joi
+    .string()
+    .email()
+    .required()
+    .messages({ "any.required": "missing required email field " }),
+});
+
 const usersSchema = new Schema({
   password: {
     type: String,
@@ -28,11 +36,20 @@ const usersSchema = new Schema({
   },
   token: String,
   avatarURL: String,
+  verify: {
+    type: Boolean,
+    default: false,
+  },
+  verificationToken: {
+    type: String,
+    required: [true, "Verify token is required"],
+  },
 });
 
 const User = model("user", usersSchema);
 
 module.exports = {
   userBodySchema,
+  verifyEmailSchema,
   User,
 };
