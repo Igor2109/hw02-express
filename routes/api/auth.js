@@ -123,7 +123,7 @@ router.patch(
       if (err) throw err;
       selectedFile.resize(250, 250).write(newPath);
     });
-    const userAvatarPath = path.join("public", "avatars", req.file.filename);
+    const userAvatarPath = path.join("avatars", req.file.filename);
     await User.updateOne({ _id: user._id }, { avatarURL: userAvatarPath });
     res.status(200).json({ avatarURL: userAvatarPath });
   }
